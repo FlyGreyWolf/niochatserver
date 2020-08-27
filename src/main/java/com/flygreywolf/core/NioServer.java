@@ -13,6 +13,8 @@ import java.util.Set;
 
 import com.flygreywolf.msg.PayLoad;
 import com.flygreywolf.util.Convert;
+import org.apache.log4j.Logger;
+
 
 /**
  * java里面的new IO， 对应到linux系统下的nonblockingIO
@@ -27,8 +29,9 @@ public class NioServer implements Runnable {
 	private Selector selector = null;
 	private SelectionKey selectionKey = null;
 	private final static int LISTEN_PORT = 8888;
-	private static HashMap<SocketChannel, PayLoad> cache = new HashMap<SocketChannel, PayLoad>();
+	private static HashMap<SocketChannel, PayLoad> cache = new HashMap<SocketChannel, PayLoad>(); // 解决拆包、粘包的cache
 
+	private Logger logger= Logger.getLogger(NioServer.class);
 	/**
 	 * initServer
 	 * 
@@ -43,6 +46,16 @@ public class NioServer implements Runnable {
 		// 将serverSocket的fd注册到内核开辟的空间中，epoll_ctl(fd1,ADD,fdxx,accept)
 		selectionKey = serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT); 
 		System.out.println("initServer is finished and success");
+
+		Thread checkHeartPacket = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				HandleHeartPacket.checkHeartPacket();
+			}
+		});
+		checkHeartPacket.start(); // 检测客户端状态的线程
+		logger.debug("sssssssss");
+
 	}
 
 	public void run() {
@@ -59,6 +72,7 @@ public class NioServer implements Runnable {
 						if (selectionKey.isAcceptable()) { // 接收连接
 							accept(selectionKey);
 						} else if (selectionKey.isReadable()) { // 读取数据
+							System.out.println("caozuoni");
 							read(selectionKey);
 						} 
 					}
@@ -85,7 +99,8 @@ public class NioServer implements Runnable {
             e.printStackTrace();
         }
     }
-    
+
+
      
     public void handleByteArr(byte[] byteArr, int pos, int len, SocketChannel channel) {
     	while(len - pos >= 4) {
@@ -108,7 +123,11 @@ public class NioServer implements Runnable {
 				System.arraycopy(byteArr, pos, content, 0, contentLen);
 				payLoad.setContent(content);
 				pos = pos + contentLen;
-				System.out.println(new String(content));
+				//System.out.println(new String(content));
+				if(HandleHeartPacket.isHeartPacket(payLoad)) {
+					HandleHeartPacket.putSocketChannel(channel);
+				}
+
 			} else { // 读不完，发生拆包问题
 				byte[] content = new byte[contentLen];
 				System.arraycopy(byteArr, pos, content, 0, len-pos);
@@ -138,7 +157,9 @@ public class NioServer implements Runnable {
             ByteBuffer byteBuffer = ByteBuffer.allocate(128);
             
             int len = channel.read(byteBuffer); // 读到的长度
-            int pos = 0;
+
+
+			int pos = 0;
             
             if (len > 0) {
  
@@ -154,7 +175,10 @@ public class NioServer implements Runnable {
                 			cache.remove(channel);
                 			System.arraycopy(byteArr, pos, payLoad.getContent(), payLoad.getPosition(), remainLen);
                 			pos = pos + remainLen;
-                			System.out.println(new String(payLoad.getContent()));
+                			// System.out.println(new String(payLoad.getContent()));
+							if(HandleHeartPacket.isHeartPacket(payLoad)) {
+								HandleHeartPacket.putSocketChannel(channel);
+							}
                 			// 还要把剩下的字节处理完
                 			handleByteArr(byteArr, pos, len, channel);
                 			
@@ -180,7 +204,10 @@ public class NioServer implements Runnable {
             					System.arraycopy(byteArr, pos, content, 0, contentLen);
             					payLoad.setContent(content);
             					pos = pos + contentLen;
-            					System.out.println(new String(content));
+            					//System.out.println(new String(content));
+								if(HandleHeartPacket.isHeartPacket(payLoad)) {
+									HandleHeartPacket.putSocketChannel(channel);
+								}
             					// 还要把剩下的字节处理完
                     			handleByteArr(byteArr, pos, len, channel);
             				} else { // 读不完，发生拆包问题
@@ -202,12 +229,15 @@ public class NioServer implements Runnable {
             	} else { // 无缓存，代表是新的数据包
             		handleByteArr(byteArr, pos, len, channel);
             	} 
-            }
+            } else { // 如果客户端断开连接了，也会不停地产生OP_READ事件，但是read的返回值是-1
+            	throw new IOException("客户端断开连接了");
+			}
         } catch (IOException e) {
             try {
                 serverSocketChannel.close();
                 selectionKey.cancel();
             } catch (IOException e1) {
+
                 e1.printStackTrace();
             }
             e.printStackTrace();

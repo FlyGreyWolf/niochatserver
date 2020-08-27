@@ -8,9 +8,5 @@ public class Main {
 		nioServer.initServer();
 		
 		new Thread(nioServer, "NioServer").start();
-//		
-//		NioSocketClient client = new NioSocketClient();
-//        client.initClient();
-//        client.start();
 	}
 }
