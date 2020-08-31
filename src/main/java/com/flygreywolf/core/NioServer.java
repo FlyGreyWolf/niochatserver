@@ -1,6 +1,7 @@
 package com.flygreywolf.core;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -12,6 +13,7 @@ import java.util.Iterator;
 import java.util.Set;
 
 import com.flygreywolf.msg.PayLoad;
+import com.flygreywolf.util.Constant;
 import com.flygreywolf.util.Convert;
 import org.apache.log4j.Logger;
 
@@ -25,13 +27,15 @@ import org.apache.log4j.Logger;
  */
 public class NioServer implements Runnable {
 
+	private static Logger logger= Logger.getLogger(NioServer.class);
+
 	private ServerSocketChannel serverSocketChannel = null;
 	private Selector selector = null;
 	private SelectionKey selectionKey = null;
 	private final static int LISTEN_PORT = 8888;
 	private static HashMap<SocketChannel, PayLoad> cache = new HashMap<SocketChannel, PayLoad>(); // 解决拆包、粘包的cache
 
-	private Logger logger= Logger.getLogger(NioServer.class);
+
 	/**
 	 * initServer
 	 * 
@@ -45,7 +49,7 @@ public class NioServer implements Runnable {
 		
 		// 将serverSocket的fd注册到内核开辟的空间中，epoll_ctl(fd1,ADD,fdxx,accept)
 		selectionKey = serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT); 
-		System.out.println("initServer is finished and success");
+		logger.info("initServer is finished and success");
 
 		Thread checkHeartPacket = new Thread(new Runnable() {
 			@Override
@@ -54,15 +58,15 @@ public class NioServer implements Runnable {
 			}
 		});
 		checkHeartPacket.start(); // 检测客户端状态的线程
-		logger.debug("sssssssss");
-
+		
 	}
 
 	public void run() {
-		System.out.println("Server is running");
+		logger.info("Server is running");
 		while (true) {
 			try {
 				int selectKey = selector.select(); // 返回有事件的fd个数
+
 				if (selectKey > 0) {
 					Set<SelectionKey> keySet = selector.selectedKeys(); // 相当于epoll wait，得到有事件的fds
 					Iterator<SelectionKey> iter = keySet.iterator();
@@ -72,17 +76,16 @@ public class NioServer implements Runnable {
 						if (selectionKey.isAcceptable()) { // 接收连接
 							accept(selectionKey);
 						} else if (selectionKey.isReadable()) { // 读取数据
-							System.out.println("caozuoni");
 							read(selectionKey);
 						} 
 					}
 				}
 			} catch (IOException e) {
-				e.printStackTrace();
+				logger.error(e.getMessage());
 				try {
 					serverSocketChannel.close(); // 关闭serversocket
 				} catch (IOException e1) {
-					e1.printStackTrace();
+					logger.error(e.getMessage());
 				}
 			}
 		}
@@ -92,14 +95,59 @@ public class NioServer implements Runnable {
         try {
             ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
             SocketChannel socketChannel = serverSocketChannel.accept();
-            System.out.println("accept a connect from clien:"+socketChannel.getRemoteAddress());
+            logger.info("accept a connect from clien:"+socketChannel.getRemoteAddress());
             socketChannel.configureBlocking(false);
             socketChannel.register(selector, SelectionKey.OP_READ);
+			send(Convert.shortToBytes(Constant.CONNECT_SUCCESS_CMD), null, socketChannel);
         } catch (IOException e) {
-            e.printStackTrace();
+        	logger.error(e.getMessage());
         }
     }
 
+	/**
+	 * 发送数据
+	 *
+	 * @param byteArr
+	 * @param msg
+	 * @param channel
+	 * @return
+	 */
+	public boolean send(byte[] byteArr, String msg, SocketChannel channel) {
+		ByteBuffer byteBuffer = null;
+		try {
+			byte[] msgByteArr = byteArr!=null?byteArr:msg.getBytes(Constant.UTF8_Encode);
+			int contentLen = msgByteArr.length;
+			byteBuffer = ByteBuffer.allocate(4 + contentLen);
+			byteBuffer.put(Convert.intToBytes(contentLen));
+			byteBuffer.put(msgByteArr);
+			byteBuffer.flip();
+			System.out.println("[client] send:" + "-- " + contentLen + (byteArr!=null?new String(byteArr):msg));
+		} catch (UnsupportedEncodingException e) { // 不支持该编码
+			logger.error(e.getMessage());
+			try {
+				channel.close();
+			} catch (IOException e1) {
+				logger.error(e1.getMessage());
+			}
+			return false;
+		}
+
+		while (byteBuffer.hasRemaining()) {
+			try {
+				channel.write(byteBuffer);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				logger.error(e.getMessage());
+				try {
+					channel.close();
+				} catch (Exception e1) {
+					logger.error(e1.getMessage());
+				}
+				return false;
+			}
+		}
+		return true;
+	}
 
      
     public void handleByteArr(byte[] byteArr, int pos, int len, SocketChannel channel) {
@@ -108,8 +156,9 @@ public class NioServer implements Runnable {
 			System.arraycopy(byteArr, pos, length, 0, 4);
 			
 			int contentLen = Convert.byteArrToInteger(length);
-			if(contentLen > 1500) {
-				System.out.println("contentLen > 1500，有可能是恶意攻击");
+			if(contentLen > Constant.MAX_CONTENT_LEN) {
+				logger.info("contentLen > 1500，有可能是恶意攻击");
+				return;
 			}
 			
 			PayLoad payLoad = new PayLoad();
@@ -152,12 +201,12 @@ public class NioServer implements Runnable {
     }
     
     public void read(SelectionKey selectionKey) {
+		SocketChannel channel = (SocketChannel) selectionKey.channel();
         try {
-            SocketChannel channel = (SocketChannel) selectionKey.channel();
+
             ByteBuffer byteBuffer = ByteBuffer.allocate(128);
             
             int len = channel.read(byteBuffer); // 读到的长度
-
 
 			int pos = 0;
             
@@ -194,8 +243,8 @@ public class NioServer implements Runnable {
             				payLoad.setLengthSize(4);
             				pos = pos + headRemainBytes;
             				int contentLen = Convert.byteArrToInteger(payLoad.getLength());
-            				if(contentLen > 1500) {
-            					System.out.println("contentLen > 1500，有可能是恶意攻击");
+            				if(contentLen > Constant.MAX_CONTENT_LEN) {
+								logger.info("contentLen > 1500，有可能是恶意攻击");
             					return;
             				}
             				if(len - pos >= contentLen) { // 可以读完
@@ -230,17 +279,12 @@ public class NioServer implements Runnable {
             		handleByteArr(byteArr, pos, len, channel);
             	} 
             } else { // 如果客户端断开连接了，也会不停地产生OP_READ事件，但是read的返回值是-1
-            	throw new IOException("客户端断开连接了");
+				channel.close();
+				selectionKey.cancel();
+				logger.debug("客户端断开连接");
 			}
-        } catch (IOException e) {
-            try {
-                serverSocketChannel.close();
-                selectionKey.cancel();
-            } catch (IOException e1) {
-
-                e1.printStackTrace();
-            }
-            e.printStackTrace();
-        }
+        } catch (Exception e) {
+			logger.error(e.getMessage());
+		}
     }
 }
