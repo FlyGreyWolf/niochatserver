@@ -8,11 +8,16 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
+import com.flygreywolf.bean.Room;
+import com.flygreywolf.msg.HandlePayLoad;
 import com.flygreywolf.msg.PayLoad;
+import com.flygreywolf.util.ByteArrPrint;
 import com.flygreywolf.util.Constant;
 import com.flygreywolf.util.Convert;
 import org.apache.log4j.Logger;
@@ -33,7 +38,15 @@ public class NioServer implements Runnable {
 	private Selector selector = null;
 	private SelectionKey selectionKey = null;
 	private final static int LISTEN_PORT = 8888;
+	private static List<Room> roomList = new ArrayList<>();
+
 	private static HashMap<SocketChannel, PayLoad> cache = new HashMap<SocketChannel, PayLoad>(); // 解决拆包、粘包的cache
+
+
+
+
+
+
 
 
 	/**
@@ -51,14 +64,40 @@ public class NioServer implements Runnable {
 		selectionKey = serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT); 
 		logger.info("initServer is finished and success");
 
-		Thread checkHeartPacket = new Thread(new Runnable() {
+
+		initRoomList();
+
+		new Thread(new Runnable() { // 检测客户端连接状态的线程
 			@Override
 			public void run() {
-				HandleHeartPacket.checkHeartPacket();
+				HandleHeartPacket.checkConnectHeartPacket();
 			}
-		});
-		checkHeartPacket.start(); // 检测客户端状态的线程
+		}).start();
+
+		new Thread(new Runnable() { // 检测客户端在房间的状态
+			@Override
+			public void run() {
+				HandleHeartPacket.checkRoomHeartPacket();
+			}
+		}).start();
 		
+	}
+
+	/**
+	 * 初始化房间列表
+	 */
+	public void initRoomList() {
+
+		roomList.add(new Room(1,"test1", "我是test1"));
+		roomList.add(new Room(2,"test2", "我是test2"));
+		roomList.add(new Room(3,"test3", "我是test3"));
+		roomList.add(new Room(4,"test4", "我是test4"));
+
+		HandleHeartPacket.roomId2SocketChannel.put(1, new ConcurrentHashMap<SocketChannel, Long>());
+		HandleHeartPacket.roomId2SocketChannel.put(2, new ConcurrentHashMap<SocketChannel, Long>());
+		HandleHeartPacket.roomId2SocketChannel.put(3, new ConcurrentHashMap<SocketChannel, Long>());
+		HandleHeartPacket.roomId2SocketChannel.put(4, new ConcurrentHashMap<SocketChannel, Long>());
+
 	}
 
 	public void run() {
@@ -98,8 +137,11 @@ public class NioServer implements Runnable {
             logger.info("accept a connect from clien:"+socketChannel.getRemoteAddress());
             socketChannel.configureBlocking(false);
             socketChannel.register(selector, SelectionKey.OP_READ);
-			send(Convert.shortToBytes(Constant.CONNECT_SUCCESS_CMD), null, socketChannel);
-        } catch (IOException e) {
+
+			// 将roomList的信息以json字符串格式返回前端
+			JSONArray roomListJsonArray= JSONArray.parseArray(JSON.toJSONString(roomList));
+			send(Convert.shortToBytes(Constant.ROOM_LIST_CMD), roomListJsonArray.toJSONString(), socketChannel);
+		} catch (IOException e) {
         	logger.error(e.getMessage());
         }
     }
@@ -107,21 +149,27 @@ public class NioServer implements Runnable {
 	/**
 	 * 发送数据
 	 *
-	 * @param byteArr
+	 * @param cmd
 	 * @param msg
 	 * @param channel
 	 * @return
 	 */
-	public boolean send(byte[] byteArr, String msg, SocketChannel channel) {
+	public static boolean send(byte[] cmd, String msg, SocketChannel channel) {
 		ByteBuffer byteBuffer = null;
 		try {
-			byte[] msgByteArr = byteArr!=null?byteArr:msg.getBytes(Constant.UTF8_Encode);
-			int contentLen = msgByteArr.length;
+			byte[] msgByteArr = msg.getBytes(Constant.UTF8_Encode);
+			byte[] combine = new byte[cmd.length + msgByteArr.length];
+			System.arraycopy(cmd, 0, combine, 0, cmd.length);
+			System.arraycopy(msgByteArr, 0, combine, cmd.length, msgByteArr.length);
+
+
+			int contentLen = combine.length;
 			byteBuffer = ByteBuffer.allocate(4 + contentLen);
+			System.out.println(contentLen);
 			byteBuffer.put(Convert.intToBytes(contentLen));
-			byteBuffer.put(msgByteArr);
+			byteBuffer.put(combine);
 			byteBuffer.flip();
-			System.out.println("[client] send:" + "-- " + contentLen + (byteArr!=null?new String(byteArr):msg));
+			System.out.println("[server] send " + contentLen + "bytes--->" + ByteArrPrint.printByteArr(combine));
 		} catch (UnsupportedEncodingException e) { // 不支持该编码
 			logger.error(e.getMessage());
 			try {
@@ -134,9 +182,10 @@ public class NioServer implements Runnable {
 
 		while (byteBuffer.hasRemaining()) {
 			try {
+
 				channel.write(byteBuffer);
+
 			} catch (Exception e) {
-				// TODO Auto-generated catch block
 				logger.error(e.getMessage());
 				try {
 					channel.close();
@@ -173,9 +222,8 @@ public class NioServer implements Runnable {
 				payLoad.setContent(content);
 				pos = pos + contentLen;
 				//System.out.println(new String(content));
-				if(HandleHeartPacket.isHeartPacket(payLoad)) {
-					HandleHeartPacket.putSocketChannel(channel);
-				}
+
+				HandlePayLoad.parse(payLoad, channel);
 
 			} else { // 读不完，发生拆包问题
 				byte[] content = new byte[contentLen];
@@ -224,10 +272,10 @@ public class NioServer implements Runnable {
                 			cache.remove(channel);
                 			System.arraycopy(byteArr, pos, payLoad.getContent(), payLoad.getPosition(), remainLen);
                 			pos = pos + remainLen;
-                			// System.out.println(new String(payLoad.getContent()));
-							if(HandleHeartPacket.isHeartPacket(payLoad)) {
-								HandleHeartPacket.putSocketChannel(channel);
-							}
+                			//System.out.println(new String(payLoad.getContent()));
+
+							HandlePayLoad.parse(payLoad, channel);
+
                 			// 还要把剩下的字节处理完
                 			handleByteArr(byteArr, pos, len, channel);
                 			
@@ -254,9 +302,9 @@ public class NioServer implements Runnable {
             					payLoad.setContent(content);
             					pos = pos + contentLen;
             					//System.out.println(new String(content));
-								if(HandleHeartPacket.isHeartPacket(payLoad)) {
-									HandleHeartPacket.putSocketChannel(channel);
-								}
+
+            					HandlePayLoad.parse(payLoad, channel);
+
             					// 还要把剩下的字节处理完
                     			handleByteArr(byteArr, pos, len, channel);
             				} else { // 读不完，发生拆包问题

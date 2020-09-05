@@ -12,10 +12,21 @@ public class PayLoad {
 	public byte[] getLength() {
 		return length;
 	}
+
 	public void setLength(byte[] length) {
 		this.length = length;
 	}
+
 	public byte[] getContent() {
+
+		for (int i = 0; i < content.length; i++) {
+			String hex = Integer.toHexString(content[i] & 0xFF);
+			if (hex.length() == 1) {
+				hex = '0' + hex;
+			}
+			System.out.print(hex.toUpperCase() + " ");
+		}
+
 		return content;
 	}
 	public void setContent(byte[] content) {

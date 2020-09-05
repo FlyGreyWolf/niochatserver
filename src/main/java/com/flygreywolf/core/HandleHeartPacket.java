@@ -1,6 +1,12 @@
 package com.flygreywolf.core;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import com.flygreywolf.msg.PayLoad;
+import com.flygreywolf.util.Constant;
+import com.flygreywolf.util.Convert;
+import com.sun.xml.internal.bind.v2.runtime.reflect.opt.Const;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
@@ -14,22 +20,18 @@ public class HandleHeartPacket {
 
     private static Logger logger = Logger.getLogger(HandleHeartPacket.class);
 
-    private static ConcurrentHashMap<SocketChannel, Long> socketChanelMap = new ConcurrentHashMap<>(); // 心跳包到达时间Map
+    public static ConcurrentHashMap<SocketChannel, Long> socketChanelMap = new ConcurrentHashMap<>(); // 连接心跳包到达时间Map
+    public static ConcurrentHashMap<Integer, ConcurrentHashMap<SocketChannel, Long>> roomId2SocketChannel = new ConcurrentHashMap<>(); // 在房间的心跳包，0x0002
+
+
     private static long MAX_TIMEOUT = 10000; // 最大超时时间，10秒
 
 
-    public static boolean isHeartPacket(PayLoad payLoad) {
-        if(payLoad.getContent().length == 0) { // 是心跳包，只有头部的4字节，无内容的空包
-            return true;
-        }
-        return false;
-    }
 
-    public static void putSocketChannel(SocketChannel socketChannel) {
-        socketChanelMap.put(socketChannel, System.currentTimeMillis());
-    }
-
-    public static void checkHeartPacket() {
+    /**
+     * 测试连接的心跳包
+     */
+    public static void checkConnectHeartPacket() {
         logger.info("Client Online Checking thread is running");
         while (true) {
             //System.out.println(socketChanelMap);
@@ -55,8 +57,39 @@ public class HandleHeartPacket {
                 }
 
             }
-
         }
+    }
+
+    /**
+     * 测试房间内的心跳包
+     */
+    public static void checkRoomHeartPacket() {
+        logger.info("Client In Room Checking thread is running");
+
+        while (true) {
+            System.out.println(roomId2SocketChannel);
+            Set<Map.Entry<Integer, ConcurrentHashMap<SocketChannel, Long>>> set = roomId2SocketChannel.entrySet();
+            try {
+                Thread.sleep(10000); // 10s 检测一次
+
+            } catch (InterruptedException e) {
+                logger.error(e.getMessage());
+            }
+
+            for(Map.Entry<Integer, ConcurrentHashMap<SocketChannel, Long>> entry : set) {
+
+                Integer roomId = entry.getKey();
+                ConcurrentHashMap<SocketChannel, Long> socketChannelTimestamp = entry.getValue();
+
+                for(SocketChannel socketChannel : socketChannelTimestamp.keySet()) {
+                    if(System.currentTimeMillis() - socketChannelTimestamp.get(socketChannel) > MAX_TIMEOUT) { // 10s以上都没有收到该客户端在房间内的的心跳包了
+                        socketChannelTimestamp.remove(socketChannel);
+                    }
+
+                }
+            }
+        }
+
     }
 
 }
