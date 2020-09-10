@@ -3,8 +3,12 @@ package com.flygreywolf.bean;
 public class Chat {
 
     private Integer roomId;
+    private Integer msgId;
     private String msg;
     private boolean isMe;
+
+    public Chat() {
+    }
 
     public Chat(String msg, boolean isMe) {
         this.msg = msg;
@@ -13,6 +17,13 @@ public class Chat {
 
     public Chat(Integer roomId, String msg, boolean isMe) {
         this.roomId = roomId;
+        this.msg = msg;
+        this.isMe = isMe;
+    }
+
+    public Chat(Integer roomId, Integer msgId, String msg, boolean isMe) {
+        this.roomId = roomId;
+        this.msgId = msgId;
         this.msg = msg;
         this.isMe = isMe;
     }
