@@ -20,4 +20,12 @@ public class Constant {
     public static Short NUM_OF_PEOPLE_IN_ROOM_CMD = 0X0003; // 表示在房间内的人数指令
     public static Short SEND_MSG_CMD = 0X0004; // 发送消息的指令
 
+    /**
+     * 消息类型
+     */
+    public final static int MY_TEXT_TYPE = 1;
+    public final static int OTHER_TEXT_TYPE = 2;
+    public final static int MY_PACKET_TYPE = 3;
+    public final static int OTHER_PACKET_TYPE = 4;
+
 }

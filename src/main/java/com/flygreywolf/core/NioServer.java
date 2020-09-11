@@ -46,9 +46,6 @@ public class NioServer implements Runnable {
 
 
 
-
-
-
 	/**
 	 * initServer
 	 * 

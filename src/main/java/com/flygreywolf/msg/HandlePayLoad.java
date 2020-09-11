@@ -3,6 +3,7 @@ package com.flygreywolf.msg;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.flygreywolf.bean.Chat;
+import com.flygreywolf.bean.Msg;
 import com.flygreywolf.bean.Room;
 import com.flygreywolf.core.HandleHeartPacket;
 import com.flygreywolf.core.NioServer;
@@ -11,7 +12,10 @@ import com.flygreywolf.util.Convert;
 import com.sun.xml.internal.bind.v2.runtime.reflect.opt.Const;
 
 import java.io.UnsupportedEncodingException;
+import java.net.Socket;
 import java.nio.channels.SocketChannel;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author FlyGreyWolf
@@ -57,12 +61,33 @@ public class HandlePayLoad {
 
         } else if(cmd == Constant.SEND_MSG_CMD) {
             // msg 是 Chat对象的json字符串格式
-            Chat chat = JSON.parseObject(msg, Chat.class);
+            Msg msgObj = JSON.parseObject(msg, Msg.class);
 
             NioServer.send( // 本人发送消息成功了
                 Convert.shortToBytes(Constant.SEND_MSG_CMD),
                     msg,
                     socketChannel);
+
+
+            ConcurrentHashMap<SocketChannel, Long> socketChannel2timestamp =  HandleHeartPacket.roomId2SocketChannel.get(msgObj.getRoomId());
+
+            Set<SocketChannel> socketChannelSet = socketChannel2timestamp.keySet();
+
+            if (msgObj.getMsgType() == Constant.MY_TEXT_TYPE) {
+                Chat chat = JSON.parseObject(msg, Chat.class);
+                Msg msg2Other = new Chat(chat.getRoomId(), chat.getMsgId(), Constant.OTHER_TEXT_TYPE, chat.getContent());
+                String msg2OtherStr = JSON.toJSONString(msg2Other);
+                for(SocketChannel sc : socketChannelSet) {
+                    if(sc != socketChannel) {
+
+                        NioServer.send(Convert.shortToBytes(Constant.SEND_MSG_CMD), msg2OtherStr, sc);
+                    }
+                }
+            }
+
+
+
+
         }
     }
 }
