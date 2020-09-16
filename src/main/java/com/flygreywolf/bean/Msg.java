@@ -6,6 +6,11 @@ public class Msg {
     private Integer msgId;
     private Integer msgType;
 
+
+    public Msg() {
+
+    }
+
     public Msg(Integer roomId, Integer msgId, Integer msgType) {
         this.roomId = roomId;
         this.msgId = msgId;

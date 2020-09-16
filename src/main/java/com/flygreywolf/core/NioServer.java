@@ -1,5 +1,15 @@
 package com.flygreywolf.core;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.flygreywolf.bean.Room;
+import com.flygreywolf.msg.HandlePayLoad;
+import com.flygreywolf.msg.PayLoad;
+import com.flygreywolf.util.ByteArrPrint;
+import com.flygreywolf.util.Constant;
+import com.flygreywolf.util.Convert;
+import org.apache.log4j.Logger;
+
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
@@ -10,17 +20,6 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONArray;
-import com.alibaba.fastjson.JSONObject;
-import com.flygreywolf.bean.Room;
-import com.flygreywolf.msg.HandlePayLoad;
-import com.flygreywolf.msg.PayLoad;
-import com.flygreywolf.util.ByteArrPrint;
-import com.flygreywolf.util.Constant;
-import com.flygreywolf.util.Convert;
-import org.apache.log4j.Logger;
 
 
 /**
@@ -41,7 +40,6 @@ public class NioServer implements Runnable {
 	private static List<Room> roomList = new ArrayList<>();
 
 	private static HashMap<SocketChannel, PayLoad> cache = new HashMap<SocketChannel, PayLoad>(); // 解决拆包、粘包的cache
-
 
 
 
@@ -325,10 +323,12 @@ public class NioServer implements Runnable {
             	} 
             } else { // 如果客户端断开连接了，也会不停地产生OP_READ事件，但是read的返回值是-1
 				channel.close();
+				cache.remove(channel);
 				selectionKey.cancel();
 				logger.debug("客户端断开连接");
 			}
         } catch (Exception e) {
+			cache.remove(channel);
 			logger.error(e.getMessage());
 		}
     }

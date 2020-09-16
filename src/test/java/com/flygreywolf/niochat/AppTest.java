@@ -4,12 +4,16 @@ import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * Unit test for simple App.
  */
 public class AppTest 
     extends TestCase
 {
+    private static volatile AtomicInteger msgId = new AtomicInteger(0);
     /**
      * Create the test case
      *
@@ -33,11 +37,14 @@ public class AppTest
      */
     public void testApp()
     {
-    	byte[] a = new byte[4];
-    	
-    	a[0] = 'a';
-    	
-    	System.out.println(a.length);
+
+        Random random = new Random();
+        int randomInt = random.nextInt(101);
+
+
+        for(int i=0;i<100;i++) {
+            System.out.println(random.nextInt(101));
+        }
         assertTrue( true );
     }
 }
