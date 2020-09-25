@@ -77,9 +77,10 @@ public class HandleHeartPacket {
                     if(System.currentTimeMillis() - socketChannelTimestamp.get(socketChannel) > MAX_TIMEOUT) { // 10s以上都没有收到该客户端在房间内的的心跳包了
                         socketChannelTimestamp.remove(socketChannel);
                     }
-
                 }
             }
+
+
         }
 
     }

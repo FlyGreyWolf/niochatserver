@@ -19,13 +19,13 @@ public class PayLoad {
 
 	public byte[] getContent() {
 
-		for (int i = 0; i < content.length; i++) {
+		/*for (int i = 0; i < content.length; i++) {
 			String hex = Integer.toHexString(content[i] & 0xFF);
 			if (hex.length() == 1) {
 				hex = '0' + hex;
 			}
 			System.out.print(hex.toUpperCase() + " ");
-		}
+		}*/
 
 		return content;
 	}

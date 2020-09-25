@@ -36,11 +36,10 @@ public class NioServer implements Runnable {
 	private ServerSocketChannel serverSocketChannel = null;
 	private Selector selector = null;
 	private SelectionKey selectionKey = null;
-	private final static int LISTEN_PORT = 8888;
+
+
 	private static List<Room> roomList = new ArrayList<>();
-
-	private static HashMap<SocketChannel, PayLoad> cache = new HashMap<SocketChannel, PayLoad>(); // 解决拆包、粘包的cache
-
+	private HashMap<SocketChannel, PayLoad> cache = new HashMap<SocketChannel, PayLoad>(); // 解决拆包、粘包的cache
 
 
 
@@ -49,32 +48,40 @@ public class NioServer implements Runnable {
 	 * 
 	 * @throws IOException
 	 */
-	public void initServer() throws IOException {
-		selector = Selector.open(); // epoll create 相当于在内核开辟空间fdxx，使用红黑树存放所有的fd
-		serverSocketChannel = ServerSocketChannel.open(); // socket，在linux底层其实就返回一个fd1
-		serverSocketChannel.configureBlocking(false); // socket 设为 非阻塞
-		serverSocketChannel.socket().bind(new InetSocketAddress(LISTEN_PORT)); // socket bind 端口
-		
-		// 将serverSocket的fd注册到内核开辟的空间中，epoll_ctl(fd1,ADD,fdxx,accept)
-		selectionKey = serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT); 
-		logger.info("initServer is finished and success");
+	public void initServer(int port)  {
+		try {
+			selector = Selector.open(); // epoll create 相当于在内核开辟空间fdxx，使用红黑树存放所有的fd
+			serverSocketChannel = ServerSocketChannel.open(); // socket，在linux底层其实就返回一个fd1
+			serverSocketChannel.configureBlocking(false); // socket 设为 非阻塞
+			serverSocketChannel.socket().bind(new InetSocketAddress(port)); // socket bind 端口
+
+			// 将serverSocket的fd注册到内核开辟的空间中，epoll_ctl(fd1,ADD,fdxx,accept)
+			selectionKey = serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+			logger.info("initServer is finished and success at " + port );
+
+		} catch (IOException e) {
+			logger.error(e.getMessage());
+		}
 
 
-		initRoomList();
+		if(port == Main.CONNECT_LISTEN_PORT) {
+			initRoomList();
 
-		new Thread(new Runnable() { // 检测客户端连接状态的线程
-			@Override
-			public void run() {
-				HandleHeartPacket.checkConnectHeartPacket();
-			}
-		}).start();
+			new Thread(new Runnable() { // 检测客户端连接状态的线程
+				@Override
+				public void run() {
+					HandleHeartPacket.checkConnectHeartPacket();
+				}
+			}).start();
 
-		new Thread(new Runnable() { // 检测客户端在房间的状态
-			@Override
-			public void run() {
-				HandleHeartPacket.checkRoomHeartPacket();
-			}
-		}).start();
+			new Thread(new Runnable() { // 检测客户端在房间的状态
+				@Override
+				public void run() {
+					HandleHeartPacket.checkRoomHeartPacket();
+				}
+			}).start();
+		}
+
 		
 	}
 
@@ -92,6 +99,8 @@ public class NioServer implements Runnable {
 		HandleHeartPacket.roomId2SocketChannel.put(2, new ConcurrentHashMap<SocketChannel, Long>());
 		HandleHeartPacket.roomId2SocketChannel.put(3, new ConcurrentHashMap<SocketChannel, Long>());
 		HandleHeartPacket.roomId2SocketChannel.put(4, new ConcurrentHashMap<SocketChannel, Long>());
+
+
 
 	}
 
@@ -164,7 +173,7 @@ public class NioServer implements Runnable {
 			byteBuffer.put(Convert.intToBytes(contentLen));
 			byteBuffer.put(combine);
 			byteBuffer.flip();
-			System.out.println("[server] send " + contentLen + "bytes--->" + ByteArrPrint.printByteArr(combine));
+			//System.out.println("[server] send " + contentLen + "bytes--->" + ByteArrPrint.printByteArr(combine));
 		} catch (UnsupportedEncodingException e) { // 不支持该编码
 			logger.error(e.getMessage());
 			try {
@@ -200,8 +209,10 @@ public class NioServer implements Runnable {
 			System.arraycopy(byteArr, pos, length, 0, 4);
 			
 			int contentLen = Convert.byteArrToInteger(length);
+
+
 			if(contentLen > Constant.MAX_CONTENT_LEN) {
-				logger.info("contentLen > 1500，有可能是恶意攻击");
+				logger.info("contentLen > " + Constant.MAX_CONTENT_LEN + "，有可能是恶意攻击");
 				return;
 			}
 			
@@ -217,7 +228,6 @@ public class NioServer implements Runnable {
 				payLoad.setContent(content);
 				pos = pos + contentLen;
 				//System.out.println(new String(content));
-
 				HandlePayLoad.parse(payLoad, channel);
 
 			} else { // 读不完，发生拆包问题
@@ -226,7 +236,7 @@ public class NioServer implements Runnable {
 				payLoad.setContent(content);
 				payLoad.setPosition(len-pos);
 				pos = len;
-//				System.out.println("发生拆包，只读取到一部分"+new String(content));
+//				System.out.println("发生拆包B ，只读取到一部分"+new String(content));
 				cache.put(channel, payLoad);
 			}
 		}
@@ -240,7 +250,7 @@ public class NioServer implements Runnable {
 			payLoad.setLength(length);
 			pos = len;
 			cache.put(channel, payLoad);
-    	} 
+    	}
     }
     
     public void read(SelectionKey selectionKey) {
@@ -251,6 +261,7 @@ public class NioServer implements Runnable {
             
             int len = channel.read(byteBuffer); // 读到的长度
 
+
 			int pos = 0;
             
             if (len > 0) {
@@ -259,6 +270,9 @@ public class NioServer implements Runnable {
             	if(cache.containsKey(channel)) {
             		
             		PayLoad payLoad = cache.get(channel);
+					System.out.println("len:" + len);
+					System.out.println("total:" + payLoad.getContent().length);
+
             		
             		if(payLoad.getLengthSize() == 4) { // 头部完整
             			int remainLen = Convert.byteArrToInteger(payLoad.getLength()) - payLoad.getPosition();
@@ -287,7 +301,7 @@ public class NioServer implements Runnable {
             				pos = pos + headRemainBytes;
             				int contentLen = Convert.byteArrToInteger(payLoad.getLength());
             				if(contentLen > Constant.MAX_CONTENT_LEN) {
-								logger.info("contentLen > 1500，有可能是恶意攻击");
+                                logger.info("contentLen > " + Constant.MAX_CONTENT_LEN + "，有可能是恶意攻击");
             					return;
             				}
             				if(len - pos >= contentLen) { // 可以读完

@@ -79,5 +79,12 @@
       <artifactId>fastjson</artifactId>
       <version>1.2.70</version>
     </dependency>
+
+    <!--Thumbnailator-->
+    <dependency>
+      <groupId>net.coobird</groupId>
+      <artifactId>thumbnailator</artifactId>
+      <version>0.4.12</version>
+    </dependency>
   </dependencies>
 </project>

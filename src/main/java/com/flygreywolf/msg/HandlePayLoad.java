@@ -1,21 +1,22 @@
 package com.flygreywolf.msg;
 
 import com.alibaba.fastjson.JSON;
-import com.flygreywolf.bean.Chat;
-import com.flygreywolf.bean.Msg;
-import com.flygreywolf.bean.RedPacket;
-import com.flygreywolf.bean.User;
+import com.flygreywolf.bean.*;
 import com.flygreywolf.core.HandleHeartPacket;
 import com.flygreywolf.core.NioServer;
 import com.flygreywolf.util.Constant;
 import com.flygreywolf.util.Convert;
+import com.flygreywolf.util.ImgUtil;
+import net.coobird.thumbnailator.Thumbnails;
 import org.apache.log4j.Logger;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.nio.channels.SocketChannel;
 import java.text.DecimalFormat;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,18 +58,19 @@ public class HandlePayLoad {
 
 
         System.out.println("cmd:" + cmd);
-        System.out.println("msg:" + msg);
+        //System.out.println("msg:" + msg);
 
         if(cmd == Constant.ENTER_ROOM_CMD) { // 是在房间的心跳包
             // msg 是 roomId
             HandleHeartPacket.roomId2SocketChannel.get(Integer.parseInt(msg)).put(socketChannel, System.currentTimeMillis());
+
 
             NioServer.send( // 返回房间人数
                     Convert.shortToBytes(Constant.NUM_OF_PEOPLE_IN_ROOM_CMD),
                     HandleHeartPacket.roomId2SocketChannel.get(Integer.parseInt(msg)).size()+"",
                     socketChannel);
 
-        } else if(cmd == Constant.SEND_MSG_CMD) { // 用户发送文字消息
+        } else if(cmd == Constant.SEND_CHAT_CMD) { // 用户发送文字消息
             // msg 是 Chat对象的json字符串格式
             Msg msgObj = JSON.parseObject(msg, Msg.class);
 
@@ -95,10 +97,10 @@ public class HandlePayLoad {
 
                 for(SocketChannel sc : socketChannelSet) {
                     if(sc != socketChannel) {
-                        NioServer.send(Convert.shortToBytes(Constant.SEND_MSG_CMD), msg2OtherStr, sc);
+                        NioServer.send(Convert.shortToBytes(Constant.SEND_CHAT_CMD), msg2OtherStr, sc);
                     } else {
                         NioServer.send( // 本人发送文字消息成功了
-                                Convert.shortToBytes(Constant.SEND_MSG_CMD),
+                                Convert.shortToBytes(Constant.SEND_CHAT_CMD),
                                 msg2MyStr,
                                 socketChannel);
                     }
@@ -157,7 +159,6 @@ public class HandlePayLoad {
             Msg msgObj = Constant.id2Msg.get(msgId);
 
 
-
             if(msgObj instanceof RedPacket) {
                 RedPacket redPacket = (RedPacket) msgObj;
 
@@ -170,7 +171,6 @@ public class HandlePayLoad {
                 }
 
                 synchronized (redPacket) {
-
 
                     if(redPacket.getRemainNum().equals("0")) { // 剩余红包数为0
 
@@ -222,8 +222,61 @@ public class HandlePayLoad {
                         Convert.shortToBytes(Constant.GET_RED_PACKET_CMD),
                         JSON.toJSONString(redPacket),
                         socketChannel);
+            }
+        } else if(cmd == Constant.SEND_IMG_CMD) {
+
+            Image img = JSON.parseObject(msg, Image.class);
+
+
+            Integer nowMsgId = msgId.addAndGet(1);
+            File file = ImgUtil.getFile(img.getContent(), "./image", nowMsgId + ".png");
+            int roomId = img.getRoomId();
+            img.setMsgId(nowMsgId);
+
+            //比例小于1缩小，宽和高同时缩小为原来的0.1倍
+            try {
+                String handleFilePath ="./handle_image"+ nowMsgId + ".png";
+
+                Thumbnails.of(file)
+                        .scale(0.3f)
+                        .outputQuality(1) // 图片质量压缩100%
+                        .toFile(handleFilePath);
+
+                file = new File(handleFilePath);
+                img.setContent(ImgUtil.getBytes(handleFilePath, (int)file.length()));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            NioServer.send( // 返回图片
+                    Convert.shortToBytes(Constant.SEND_IMG_CMD),
+                    JSON.toJSONString(img),
+                    socketChannel); // 通过img端口的socketchannel返回去
+
+
+
+            ConcurrentHashMap<SocketChannel, Long> socketChannel2timestamp =  HandleHeartPacket.roomId2SocketChannel.get(roomId);
+            Set<SocketChannel> socketChannelSet = socketChannel2timestamp.keySet();
+
+
+            for(SocketChannel s : socketChannelSet) {
 
             }
+
+        } else if(cmd == Constant.GET_BIG_IMG_CMD) {
+            Image img = JSON.parseObject(msg, Image.class);
+
+            String path = "./image\\" + msgId + ".png";
+
+            File file = new File(path);
+
+            img.setContent(ImgUtil.getBytes(path, (int)file.length()));
+
+            NioServer.send( // 返回大图片
+                    Convert.shortToBytes(Constant.GET_BIG_IMG_CMD),
+                    JSON.toJSONString(img),
+                    socketChannel); // 通过img端口的socketchannel返回去
+
         }
     }
 }
