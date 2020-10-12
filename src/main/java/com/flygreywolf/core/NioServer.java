@@ -257,25 +257,25 @@ public class NioServer implements Runnable {
         try {
 
             ByteBuffer byteBuffer = ByteBuffer.allocate(128);
-            
+
             int len = channel.read(byteBuffer); // 读到的长度
 
 
 			int pos = 0;
-            
+
             if (len > 0) {
- 
+
             	byte[] byteArr = byteBuffer.array();
             	if(cache.containsKey(channel)) {
-            		
+
             		PayLoad payLoad = cache.get(channel);
 					System.out.println("len:" + len);
 					System.out.println("total:" + payLoad.getContent().length);
 
-            		
+
             		if(payLoad.getLengthSize() == 4) { // 头部完整
             			int remainLen = Convert.byteArrToInteger(payLoad.getLength()) - payLoad.getPosition();
-                  		 
+
                 		if(len >= remainLen) { // 可以读完
                 			cache.remove(channel);
                 			System.arraycopy(byteArr, pos, payLoad.getContent(), payLoad.getPosition(), remainLen);
@@ -286,14 +286,14 @@ public class NioServer implements Runnable {
 
                 			// 还要把剩下的字节处理完
                 			handleByteArr(byteArr, pos, len, channel);
-                			
+
                 		} else { // 读不完，发生拆包问题
                 			System.arraycopy(byteArr, pos, payLoad.getContent(), payLoad.getPosition(), len-pos);
                 			payLoad.setPosition(payLoad.getPosition()+len-pos);
                 		}
             		} else { // 头部不完整
             			int headRemainBytes = 4 - payLoad.getLengthSize();
-            			
+
             			if(len >= headRemainBytes) { // 可以组装成完整的头部了
             				System.arraycopy(byteArr, pos, payLoad.getLength(), payLoad.getLengthSize(), headRemainBytes);
             				payLoad.setLengthSize(4);
@@ -323,17 +323,17 @@ public class NioServer implements Runnable {
             					pos = len;
             					//System.out.println("发生拆包，只读取到一部分"+new String(content));
             				}
-            				
+
             			} else { // 还是没能组装成完整头部
             				System.arraycopy(byteArr, pos, payLoad.getLength(), payLoad.getLengthSize(), len-pos);
             				payLoad.setLengthSize(payLoad.getLengthSize() + len  -pos);
             				pos = len;
             			}
             		}
-            		 
+
             	} else { // 无缓存，代表是新的数据包
             		handleByteArr(byteArr, pos, len, channel);
-            	} 
+            	}
             } else { // 如果客户端断开连接了，也会不停地产生OP_READ事件，但是read的返回值是-1
 				channel.close();
 				cache.remove(channel);
@@ -342,6 +342,7 @@ public class NioServer implements Runnable {
 			}
         } catch (Exception e) {
 			cache.remove(channel);
+			e.printStackTrace();
 			logger.error(e.getMessage());
 		}
     }
