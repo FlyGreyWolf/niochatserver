@@ -1,12 +1,14 @@
 package com.flygreywolf.msg;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.flygreywolf.bean.*;
 import com.flygreywolf.core.HandleHeartPacket;
 import com.flygreywolf.core.NioServer;
 import com.flygreywolf.util.Constant;
 import com.flygreywolf.util.Convert;
 import com.flygreywolf.util.ImgUtil;
+
 import net.coobird.thumbnailator.Thumbnails;
 import org.apache.log4j.Logger;
 
@@ -14,14 +16,14 @@ import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
+
 import java.nio.channels.SocketChannel;
-import java.text.DecimalFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @author FlyGreyWolf
@@ -227,15 +229,16 @@ public class HandlePayLoad {
 
             Image img = JSON.parseObject(msg, Image.class);
 
+            System.out.println(socketChannel.socket().getPort());
 
             Integer nowMsgId = msgId.addAndGet(1);
-            File file = ImgUtil.getFile(img.getContent(), "./image", nowMsgId + ".png");
+            File file = ImgUtil.getFile(img.getContent(), "./", "origin_image_" + nowMsgId + ".png");
             int roomId = img.getRoomId();
             img.setMsgId(nowMsgId);
 
-            //比例小于1缩小，宽和高同时缩小为原来的0.1倍
+            //比例小于1缩小，宽和高同时缩小为原来的0.3倍
             try {
-                String handleFilePath ="./handle_image"+ nowMsgId + ".png";
+                String handleFilePath ="./handle_image_"+ nowMsgId + ".png";
 
                 Thumbnails.of(file)
                         .scale(0.3f)
@@ -251,31 +254,45 @@ public class HandlePayLoad {
             NioServer.send( // 返回图片
                     Convert.shortToBytes(Constant.SEND_IMG_CMD),
                     JSON.toJSONString(img),
-                    socketChannel); // 通过img端口的socketchannel返回去
+                    socketChannel); // 通过6667端口的socketchannel返回去
 
+            Constant.id2ImageAndSocketChannel.put(nowMsgId, new ImageAndSocketChannel(img, socketChannel));
 
+        } else if(cmd == Constant.IS_SEND_IMG_YOU_CMD) {
+            JSONArray  params =   JSON.parseArray(msg); // 0:msgId, 1:roomId
+
+            String msgIdStr = (String) params.get(0);
+            String roomIdStr = (String) params.get(1);
+
+            Integer msgId = Integer.valueOf(msgIdStr);
+            Integer roomId = Integer.valueOf(roomIdStr);
+
+            System.out.println("sb"+msgId + "____________" + roomId );
 
             ConcurrentHashMap<SocketChannel, Long> socketChannel2timestamp =  HandleHeartPacket.roomId2SocketChannel.get(roomId);
             Set<SocketChannel> socketChannelSet = socketChannel2timestamp.keySet();
 
+            ImageAndSocketChannel isc = Constant.id2ImageAndSocketChannel.get(msgId);
+
+            Image img = isc.getImage();
+
+
+            img.setMsgType(Constant.OTHER_IMG_TYPE);
+
+            String imgStr = JSON.toJSONString(img);
+            SocketChannel sendSC = isc.getSocketChannel();
 
             for(SocketChannel s : socketChannelSet) {
 
+                if(s != socketChannel) {
+                    NioServer.send( // 返回图片
+                            Convert.shortToBytes(Constant.SEND_IMG_CMD),
+                            imgStr,
+                            socketChannel); // 通过6666端口的socketchannel返回去
+                }
+
             }
 
-        } else if(cmd == Constant.GET_BIG_IMG_CMD) {
-            Image img = JSON.parseObject(msg, Image.class);
-
-            String path = "./image\\" + msgId + ".png";
-
-            File file = new File(path);
-
-            img.setContent(ImgUtil.getBytes(path, (int)file.length()));
-
-            NioServer.send( // 返回大图片
-                    Convert.shortToBytes(Constant.GET_BIG_IMG_CMD),
-                    JSON.toJSONString(img),
-                    socketChannel); // 通过img端口的socketchannel返回去
 
         }
     }

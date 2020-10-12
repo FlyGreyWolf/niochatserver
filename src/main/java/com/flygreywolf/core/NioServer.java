@@ -42,7 +42,6 @@ public class NioServer implements Runnable {
 	private HashMap<SocketChannel, PayLoad> cache = new HashMap<SocketChannel, PayLoad>(); // 解决拆包、粘包的cache
 
 
-
 	/**
 	 * initServer
 	 * 

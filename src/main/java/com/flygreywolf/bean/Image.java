@@ -1,11 +1,14 @@
 package com.flygreywolf.bean;
 
-public class Image extends Msg{
+import java.nio.channels.SocketChannel;
 
+public class Image extends Msg {
 
     private byte[] content;
 
-    public Image() {}
+    public Image() {
+    }
+
 
     public Image(byte[] content) {
         this.content = content;
@@ -24,4 +27,6 @@ public class Image extends Msg{
     public void setContent(byte[] content) {
         this.content = content;
     }
+
+
 }

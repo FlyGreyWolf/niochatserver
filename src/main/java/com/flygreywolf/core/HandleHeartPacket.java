@@ -15,7 +15,6 @@ public class HandleHeartPacket {
     public static ConcurrentHashMap<SocketChannel, Long> socketChanelMap = new ConcurrentHashMap<>(); // 连接心跳包到达时间Map
     public static ConcurrentHashMap<Integer, ConcurrentHashMap<SocketChannel, Long>> roomId2SocketChannel = new ConcurrentHashMap<>(); // 在房间的心跳包，0x0002
 
-
     private static long MAX_TIMEOUT = 10000; // 最大超时时间，10秒
 
 

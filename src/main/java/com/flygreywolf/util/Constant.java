@@ -1,6 +1,7 @@
 package com.flygreywolf.util;
 
 import com.flygreywolf.bean.Image;
+import com.flygreywolf.bean.ImageAndSocketChannel;
 import com.flygreywolf.bean.Msg;
 import com.flygreywolf.bean.RedPacket;
 
@@ -19,6 +20,8 @@ public class Constant {
     public static int MAX_CONTENT_LEN = Integer.MAX_VALUE; // 消息内容最大长度是1500个字节
 
 
+    public static String param1 = "nioSocketClient"; // nioSocketClient对象
+
     /**
      * 指令
      */
@@ -29,8 +32,7 @@ public class Constant {
     public static Short SNED_RED_PACKET_CMD = 0X0005; // 发送红包的指令
     public static Short GET_RED_PACKET_CMD = 0X0006; // 抢红包的指令
     public static Short SEND_IMG_CMD = 0X0007;
-    public static Short GET_BIG_IMG_CMD = 0X0008; // 看大图
-
+    public static Short IS_SEND_IMG_YOU_CMD = 0X0008; // 询问是否发送图片
 
     /**
      * 消息类型
@@ -48,6 +50,8 @@ public class Constant {
      * 数据结构
      */
     public static ConcurrentHashMap<Integer, Msg> id2Msg = new ConcurrentHashMap<>(); // msgId --> msgObj
+    public static ConcurrentHashMap<Integer, ImageAndSocketChannel> id2ImageAndSocketChannel = new ConcurrentHashMap<>(); // msgId --> ImageAndSocketChannel
+
     public static HashSet<String> imgNameSet = new HashSet<>();
 
 
